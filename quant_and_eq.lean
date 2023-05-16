@@ -42,7 +42,7 @@ example : (∀ x, p x ∨ r) ↔ (∀ x, p x) ∨ r := Iff.intro
     byCases
       (fun hr : r  => Or.inr hr)
       (fun hnr : ¬r =>
-      	sorry -- :((
+        sorry -- :((
         -- Or.inl (fun x => Or.resolve_left (h x) hnr)
       )
   )
@@ -64,7 +64,11 @@ example : (∀ x, r → p x) ↔ (r → ∀ x, p x) := Iff.intro
 variable (men : Type) (barber : men)
 variable (shaves : men → men → Prop)
 
-example (h : ∀ x : men, shaves barber x ↔ ¬ shaves x x) : False := sorry
+example (h : ∀ x : men, shaves barber x ↔ ¬ shaves x x) : False := (
+  fun hh : h => 
+    sorry
+
+)
 
 -- ## 4
 -- Remember that, without any parameters, an expression of type Prop is just an assertion. Fill in the definitions of prime and Fermat_prime below, and construct each of the given assertions. For example, you can say that there are infinitely many primes by asserting that for every natural number n, there is a prime number greater than n. Goldbach's weak conjecture states that every odd number greater than 5 is the sum of three primes. Look up the definition of a Fermat prime or any of the other statements, if necessary.
