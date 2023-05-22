@@ -58,8 +58,15 @@ example : (p → (q → r)) ↔ (p ∧ q → r) := Iff.intro
     (fun hp : p => fun hq : q => show r from h ⟨hp, hq⟩)
   )
 
-example : ((p ∨ q) → r) ↔ (p → r) ∧ (q → r) := sorry
+example : ((p ∨ q) → r) ↔ (p → r) ∧ (q → r) := by
+  apply Iff.intro
+  . intro h
+    sorry
 
+  . intro ⟨hp, hq⟩
+    intro pOrQ
+    exact (Or.elim pOrQ (fun hpp => hp hpp) (fun hqq => hq hqq))
+    
 example : ¬(p ∨ q) ↔ ¬p ∧ ¬q := Iff.intro
   (fun h : p ∨ q → False  =>
     ⟨fun hp : p => show False from h (Or.inl hp),
@@ -86,9 +93,28 @@ example : p ∧ ¬q → ¬(p → q) :=
 
 example : ¬p → (p → q) := fun hnp : ¬p => fun p => absurd p hnp
 
-example : (¬p ∨ q) → (p → q) := sorry
-example : p ∨ False ↔ p := sorry
-example : p ∧ False ↔ False := sorry
-example : (p → q) → (¬q → ¬p) := sorry
+example : (¬p ∨ q) → (p → q) := by
+  intros h hp
+  exact Or.elim h (fun hpp : ¬p => absurd hp hpp) (fun hq => hq)
 
--- TODO: finish later?
+example : p ∨ False ↔ p := by
+  apply Iff.intro
+  . intro h
+    apply Or.elim h
+    . intro hp; assumption
+    . intro hf
+      contradiction
+  . intro hp
+    exact Or.inl hp
+
+example : p ∧ False ↔ False := by
+  apply Iff.intro
+  . intro ⟨_hp, hfalse⟩
+    exact hfalse  
+  . intro hfalse
+    exact ⟨(by contradiction), hfalse⟩ 
+
+example : (p → q) → (¬q → ¬p) := by
+  intros hpq hNq
+  intro hp
+  exact absurd (hpq hp) hNq
