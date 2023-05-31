@@ -54,4 +54,6 @@ theorem square_it_O_n : is_square (fun n: Nat => (square_it n).snd) :=
       | inr he => rw [← he]; simp [square_it, lin_it]
   Exists.intro 4 (Exists.intro 10 h)
 
+
+
 end BigO
