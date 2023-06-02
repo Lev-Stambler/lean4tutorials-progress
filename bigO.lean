@@ -1,59 +1,49 @@
-import Mathlib 
+import Lean
+import Mathlib
+import IncrRuntimeAttr
 
-inductive BigO where
-| base : BigO
-| recurse : BigO → BigO
-
+open Lean
 namespace BigO
 
--- def nLin : Nat → BigO
---   | 0 => base
---   | n + 1 => recurse (nLin n)
+-- Ok, so we may want to use something "monoid esque" but also maybe not
+-- It may be better to instead just accumulate on a global variable?
+-- def RuntimeFun : α → β × Nat 
+-- structure RuntimeFun where
+--   f : α → β
+--   runtime: Nat
 
-def is_square (f : Nat → Nat) :=
-  ∃ c b : Nat, ∀ n :Nat, (n ≥ b → f n ≤ c * n * n)
+inductive RuntimeFun where
+  | func {α β : Type } (runtime : Nat) (g : α → β) : RuntimeFun  
 
-def lin_it : Nat → Nat × Nat 
-  | 0 => (0, 0)
-  | n + 1 => ((lin_it n).1 + 1, (lin_it n).2 + 1)
+-- instance : Monad RuntimeFun where
+--   pure f  := RuntimeFun.func 0  f
+--   bind runtime_f next :=
+--     match runtime_f with
+--     | RuntimeFun.func runtime _ => next (runtime + 1)
 
-def square_it : Nat → Nat × Nat
-  | 0 => (0, 0) 
-  | n + 1 =>
-  let (a, b) := lin_it (n + 1)
-  let (c, d) := square_it n
-  (a + c, b + d)
+-- instance : Coe RuntimeFun (α → β) where  
+--   coe F := match F with
+--   | RuntimeFun.func _ g => g
+-- This is what I'd like
+@[incr_runtime] def lin_ex_2 : Nat → Bool
+  | 0 => true
+  | n + 1 => lin_ex_2 n
 
-theorem square_it_O_n : is_square (fun n: Nat => (square_it n).snd) := 
-  let f := fun n: Nat => (square_it n).snd
-  have h : ∀ n : Nat, (n ≥ 10 → f n ≤ 4 * n * n) := by
-    intros n hn
-    simp [square_it, lin_it]
-    induction n
-    . simp [square_it, lin_it]
-    . rename_i n hnn
-      cases Nat.le_or_eq_or_le_succ hn with
-      | inl hgt =>
-        simp [square_it, lin_it]
-        repeat (rw [Nat.mul_succ])
-        repeat (rw [Nat.add_mul])
-        have : 4 * n * n + 4 * n + (4 * n + 4) = (8 * n + 4) + 4 * n *n :=
-          linarith
-        rw [this]
-        apply Nat.add_le_add
-        exact (Nat.recOn (motive := fun n => (lin_it n).snd + 1 ≤ 8*n + 4) n 
-        (show 0 + 1 ≤ 8 * 0 + 4 from by simp)
-        (fun (n : Nat) ih => by
-          simp at *; simp [lin_it]; rw [Nat.mul_succ];
-          show  _ ≤ 8 * n + 4 + 8
-          apply Nat.add_le_add
-          . exact ih
-          . simp
-        ))
-        . exact hnn hgt
-      | inr he => rw [← he]; simp [square_it, lin_it]
-  Exists.intro 4 (Exists.intro 10 h)
+#eval get_runtime lin_ex_2 10
 
+syntax term "^^ " term : term
 
+macro_rules
+  | `($f^^ $x) => `(((↑$f) $x).1)
+
+def lin_ex : Nat → (Bool × Nat)
+  | 0 => ⟨true, 1⟩ 
+  | n + 1 => let b := lin_ex n; ⟨!b.1, 1 + b.2⟩
+
+def quad_ex : Nat → (Bool × Nat)
+  | 0 => ⟨true, 1⟩   
+  | n + 1 => let b := lin_ex n
+    let q := quad_ex n
+    ⟨(!b.1 && q.1) || (b.1 && !q.1), b.2 + q.2⟩ 
 
 end BigO
