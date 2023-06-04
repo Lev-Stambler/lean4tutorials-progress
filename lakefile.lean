@@ -9,6 +9,9 @@ lean_lib «Hello» {
   -- add library configuration options here
 }
 
+lean_lib «IncrRuntimeAttr» {
+} 
+
 lean_lib «bigO» {
 } 
 

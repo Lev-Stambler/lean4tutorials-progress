@@ -29,7 +29,10 @@ inductive RuntimeFun where
   | 0 => true
   | n + 1 => lin_ex_2 n
 
-#eval get_runtime lin_ex_2 10
+#eval 10 + 1
+#check lin_ex_2runtime
+
+#eval lin_ex_2 10
 
 syntax term "^^ " term : term
 
