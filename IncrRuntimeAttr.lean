@@ -3,6 +3,7 @@ import Mathlib.Lean.Meta
 open Lean Meta Elab
 open Nat
 
+def prod_make (α : Type) (β : Type) (a : α) (b : β) : Prod α β := Prod.mk a b
 /-- Implementation for both `mk_iff` and `mk_iff_of_inductive_prop`.y
 -/
 def mkRuntimePropImpl (ind : Name) (rel : Name) (relStx : Syntax) : MetaM Unit := do
@@ -26,62 +27,72 @@ def mkRuntimePropImpl (ind : Name) (rel : Name) (relStx : Syntax) : MetaM Unit :
 
   -- toCases mp shape
 
-  -- let ⟨mprFvar, mpr'⟩ ← mpr.intro1
-  -- toInductive mpr' constrs ((fvars.toList.take params).map .fvar) shape mprFvar
+  -- -- let ⟨mprFvar, mpr'⟩ ← mpr.intro1
+  -- -- toInductive mpr' constrs ((fvars.toList.take params).map .fvar) shape mprFvar
  
-  -- TODO: get rid of return type?
-  -- TODO: I dont think that this is right
-  -- #print defVal.type
-  -- TODO: type reinforcement
+  -- -- TODO: get rid of return type?
+  -- -- TODO: I dont think that this is right
+  -- -- #print defVal.type
+  -- -- TODO: type reinforcement
   let runtime_type := match defVal.type with
   | Expr.forallE a inpType resType _ => Expr.forallE a inpType 
       (mkAppN (.const ``Prod.mk [Level.succ .zero, Level.succ .zero])
              #[Expr.sort (Level.succ .zero), Expr.sort (Level.succ .zero),  .const ``Nat [], resType]) .default
   | _ => Expr.const ``Nat [] -- TODO: put in error throw
-  -- TODO: put in error throw
-  -- | _ => throwError "The input type must be a function with a →"
+  -- -- TODO: put in error throw
+  -- -- | _ => throwError "The input type must be a function with a →"
 
-  -- := Expr.lam `args defVal.type (match defVal.value with
-  -- ) .default
-  -- TODO:?
-  let rec runtime_value : Expr → Expr 
-    | Expr.app f args => 
-      mkAppN (.const ``Prod.mk []) #[
-        -- Runtime
-        mkAppN (.const ``Nat.add []) #[
+  -- -- := Expr.lam `args defVal.type (match defVal.value with
+  -- -- ) .default
+  -- -- TODO:?
+
+  let rec runtime_value : Expr → Bool → Expr
+  |   Expr.app f args, true => 
+          mkAppN (.const ``prod_make .nil) #[
+            .const `Nat List.nil,
+            .const `Bool List.nil,
+            -- Add the runtime accumulated in `f`
+            mkAppN (.const `Nat.add .nil)
+            #[
+              mkNatLit 1,
+              -- Add the runtime accumalated in `args`
+              runtime_value args false -- TODO: change to add with **projection**
+              -- TODO: have let and then return adding of proj and other
+            ],
+            -- Value: TODO HERE WE CAN RECURSE OR SOMETHING
+            .app f args
+          ]
+  |   Expr.app f args, false => 
           -- Add the runtime accumulated in `f`
-          mkAppN (.const ``Nat.add []) #[
-            .app (
-              mkAppN (.const
-                ``Nat.add []) #[
-                  .app (.const ``Nat.succ []) (.const ``Nat.zero []),
-                  runtime_value f -- TODO: change to add with **projection**
-                ] 
-            ) (runtime_value f),
-            (runtime_value args)],
-          -- Add the runtime accumalated in `args`
-          runtime_value args
-        ],
-        -- Value
-        Expr.app f args
-      ]
-      
-    | Expr.lam argName argType body _ => 
-      .lam argName argType (runtime_value body) .default 
-    | .const a ℓ => --.const ``Nat.zero []
-         mkAppN (.const ``Prod.mk []) #[
-           .const ``Nat.zero [],
-           .const a ℓ
-         ]
-    | _ => .const ``Nat.zero []
-
+          mkAppN (.const `Nat.add .nil)
+          #[
+            mkNatLit 1,
+            -- Add the runtime accumalated in `args`
+            runtime_value args false -- TODO: change to add with **projection**
+            -- TODO: have let and then return adding of proj and other
+          ]
+  |   Expr.lam argName argType body _, true => 
+          .lam argName argType (runtime_value body true) .default 
+  |   Expr.lam argName argType body _, false => 
+          .lam argName argType (runtime_value body false) .default 
+  -- | .const `a ℓ => --.const ``Nat.zero []
+  --      mkAppN (.const ``prod_make .nil) #[
+  --         .const `Nat List.nil,
+  --         .const `Nat .nil,
+  --         mkNatLit 0,
+  --         .const `a ℓ
+  --      ]
+  |   _, true => mkAppN (.const ``prod_make .nil) #[.const `Nat [], .const `Bool [], mkNatLit 10, .const `Bool.false []] --mkNatLit 100
+  |   _, false => mkNatLit 0
+ 
   -- Add decleration of Runtime Function
   addDecl $ .defnDecl {
-    value  := runtime_value defVal.value -- want this value to be correct
+    value  := .const `sorry []-- runtime_value defVal.value true-- want this value to be correct
     hints  := defVal.hints
     safety := defVal.safety -- not quite sure about how to do saftey but should be exact same
     levelParams := defVal.levelParams
-    type := .forallE `a (.const ``Nat []) (mkAppN (.const ``Prod.mk [Level.succ .zero, Level.succ .zero]) #[Expr.sort (Level.succ .zero), Expr.sort (Level.succ .zero), Expr.const ``Nat [], Expr.const ``Bool []]) .default --runtime_type -- Want this type to be correct
+    --type := runtime_type
+    type := .forallE `a (.const `Nat []) (mkAppN (.const ``Prod.mk [Level.succ .zero, Level.succ .zero]) #[Expr.sort (Level.succ .zero), Expr.sort (Level.succ .zero), Expr.const ``Nat [], Expr.const ``Bool []]) .default --runtime_type -- Want this type to be correct
     name := rel
   }
   -- addDeclarationRanges rel {

@@ -1,9 +1,12 @@
 import Lean
 import Mathlib
--- import IncrRuntimeAttr
-open Lean Meta Elab PrettyPrinter Delaborator
-open Nat
-open List
+import IncrRuntimeAttr
+open Lean Meta Elab PrettyPrinter Delaborator 
+open Nat Meta
+
+-- def prod_make (α : Type) (β : Type) (a : α) (b : β) : Prod α β := Prod.mk a b
+
+def add_three (x y z : Nat) := x + y + z
 
 namespace BigO
 
@@ -16,8 +19,19 @@ namespace BigO
 
 #check Prod.mk Nat Nat
 
-inductive RuntimeFun where
-  | func {α β : Type } (runtime : Nat) (g : α → β) : RuntimeFun  
+-- inductive RuntimeFun where
+--   | func {α β : Type } (runtime : Nat) (g : α → β) : RuntimeFun  
+
+
+def addDeclBoy := addDecl $ .defnDecl {
+    value  := .const `sorry .nil-- runtime_value defVal.value true-- want this value to be correct
+    hints  := defVal.hints
+    safety := defVal.safety -- not quite sure about how to do saftey but should be exact same
+    levelParams := defVal.levelParams
+    --type := runtime_type
+    type := .forallE `a (.const `Nat .nil) (mkAppN (.const ``Prod.mk [Level.succ .zero, Level.succ .zero]) #[Expr.sort (Level.succ .zero), Expr.sort (Level.succ .zero), Expr.const ``Nat [], Expr.const ``Bool []]) .default --runtime_type -- Want this type to be correct
+    name := rel
+}
 
 
 -- instance : Monad RuntimeFun where
@@ -36,59 +50,86 @@ inductive RuntimeFun where
 -- @[incr_runtime]
 -- def lin_ex_2 (n : Nat) : Bool := false
 
-def runtime_value : Expr → Expr 
-    | Expr.app f args => 
-        mkAppN (.const ``Prod.mk .nil) #[
-          .const ``Nat List.nil,
-          .const ``Bool List.nil,
-          -- Runtime
-          mkAppN (.const ``Nat.add List.nil) #[
-            -- Add the runtime accumulated in `f`
-            mkAppN (.const ``Nat.add .nil) #[
-              .app (
-                mkAppN (.const
-                  ``Nat.add .nil) #[
-                    .app (.const ``Nat.succ List.nil) (.const ``Nat.zero List.nil),
-                    runtime_value f -- TODO: change to add with **projection**
-                  ] 
-              ) (runtime_value f),
-              (runtime_value args)],
+
+def runtime_value : Expr → Bool → Expr
+|   Expr.app f args, true => 
+        mkAppN (.const `prod_make .nil) #[
+          .const `Nat List.nil,
+          .const `Nat List.nil,
+          -- Add the runtime accumulated in `f`
+          mkAppN (.const `Nat.add .nil)
+          #[
+            mkNatLit 1,
             -- Add the runtime accumalated in `args`
-            runtime_value args
+            runtime_value args false -- TODO: change to add with **projection**
+            -- TODO: have let and then return adding of proj and other
           ],
-          -- Value
-          Expr.app f args
+          -- Value: TODO HERE WE CAN RECURSE OR SOMETHING
+          .app f args
         ]
-      
-    | Expr.lam argName argType body _ => 
-      .lam argName argType (runtime_value body) .default 
-    | .const `a ℓ => --.const ``Nat.zero []
-         mkAppN (.const ``Prod.mk .nil) #[
-            .const ``Nat List.nil,
-            .const ``Bool .nil,
-           .const ``Nat.zero .nil,
-          .bvar 0--  .const `a ℓ
-          --  .const `Bool.true .nil
-         ]
-    | _ => mkNatLit 69
+|   Expr.app f args, false => 
+        -- Add the runtime accumulated in `f`
+        mkAppN (.const `Nat.add .nil)
+        #[
+          mkNatLit 1,
+          -- Add the runtime accumalated in `args`
+          runtime_value args false -- TODO: change to add with **projection**
+          -- TODO: have let and then return adding of proj and other
+        ]
+|   Expr.lam argName argType body _, b => 
+        .lam argName argType (runtime_value body b) .default 
+-- | .const `a ℓ => --.const ``Nat.zero []
+--      mkAppN (.const ``prod_make .nil) #[
+--         .const `Nat List.nil,
+--         .const `Nat .nil,
+--         mkNatLit 0,
+--         .const `a ℓ
+--      ]
+|   _, _ => mkNatLit 1
   
 #check runtime_value
-def lin_ex_2 (n : Nat) : Bool := false
+def lin_ex_2 (n : Nat) : Nat := 1 + n
 -- Hmmm... I guess we can j write a macro
-#eval Expr.const ``lin_ex_2 .nil
+#eval  (Expr.const `lin_ex_2 .nil)
 
-#eval (runtime_value (.lam `a  (.const `Nat .nil) (.const `a .nil) .default))
+#eval (runtime_value (.lam `a  (.const `Nat .nil) (.const `a .nil) .default) true)
+
+
+def aaa [Monad m] : MetaM DefinitionVal := do 
+    let .defnInfo defVal ← getConstInfo (`runtime_value)
+        | throwError "aaa";
+    pure defVal
+
+#check aaa
+
 
 def ee : Expr := 
-  (runtime_value (.lam `a  (.const `Nat .nil) (.const `a .nil) .default))
--- #check ee
+   --  TODO: mkAppN is too powerful!!!
+   (runtime_value (.lam `a  (.const ``Nat .nil) (mkAppN (.const `Nat.add .nil) #[.bvar 0, mkNatLit 13] ) .default) true)
+-- #eval elabEval ee
 
 @[delab app.foo]
-def dee : Delab := (delab ee)
+def dee : Delab := do (delab ee)
+
+@[delab app.goo]
+def deee : Delab := do (delab (Expr.app ee (mkNatLit 2)))
 
 #check (foo)
-#eval (foo) false
--- #eval ee false
+
+#check (foo)
+#eval (foo) 2
+#eval goo
+
+def fff (a : Nat) : Nat := 
+  prod_make ℕ ℕ
+    (Nat.add 1
+      (prod_make ℕ ℕ (
+        Nat.add 1 (
+          prod_make ℕ ℕ (
+            Nat.add 1 (prod_make ℕ ℕ 1 1).1) (1)).1) 1).1)
+    (Nat.add 2 1)
+
+#eval fff 1
 
 
 
@@ -119,3 +160,48 @@ def quad_ex : Nat → (Bool × Nat)
     ⟨(!b.1 && q.1) || (b.1 && !q.1), b.2 + q.2⟩ 
 
 end BigO
+
+def kk : ℕ → ℕ × ℕ := fun a =>
+  prod_make ℕ ℕ
+    (Nat.add
+      (Nat.add (succ zero)
+        (prod_make ℕ ℕ
+            (Nat.add (Nat.add (succ zero) (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+              (prod_make ℕ ℕ
+                  (Nat.add
+                    (Nat.add (succ zero)
+                      (prod_make ℕ ℕ
+                          (Nat.add
+                            (Nat.add (succ zero)
+                              (prod_make ℕ ℕ
+                                  (Nat.add (Nat.add (succ zero) (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+                                    (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+                                  1).1)
+                            (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+                          (2)).1)
+                    (prod_make ℕ ℕ
+                        (Nat.add (Nat.add (succ zero) (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+                          (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+                        (22)).1)
+                  2).1)
+            (2)).1)
+      (prod_make ℕ ℕ
+          (Nat.add
+            (Nat.add (succ zero)
+              (prod_make ℕ ℕ
+                  (Nat.add
+                    (Nat.add (succ zero)
+                      (prod_make ℕ ℕ
+                          (Nat.add (Nat.add (succ zero) (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+                            (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+                          1).1)
+                    (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+                  (1)).1)
+            (prod_make ℕ ℕ
+                (Nat.add (Nat.add (succ zero) (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+                  (prod_make ℕ ℕ (succ zero) (succ zero)).1)
+                (1)).1)
+          1).1)
+    (Nat.add 2 1)
+
+#eval kk 10

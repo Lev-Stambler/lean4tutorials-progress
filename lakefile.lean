@@ -12,6 +12,9 @@ lean_lib «Hello» {
 lean_lib «IncrRuntimeAttr» {
 } 
 
+lean_lib «bigO2» {
+} 
+
 lean_lib «bigO» {
 } 
 
