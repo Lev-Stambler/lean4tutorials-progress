@@ -29,45 +29,6 @@ inductive RuntimeFun {α β : Type}  where
   -- |
 -- type RuntimeFun := Prod Nat (Nat → Nat)
 
-
-
-def runtime_value : Expr → Bool → Expr
-|   Expr.app f args, true => 
-        mkAppN (.const `Prod.mk [.zero, .zero]) #[
-          .const `Nat [],
-          .const `Bool [],
-          -- Add the runtime accumulated in `f`
-          mkAppN (.const `Nat.add .nil)
-          #[
-            mkNatLit 1,
-            -- Add the runtime accumalated in `args`
-            runtime_value args false -- TODO: change to add with **projection**
-            -- TODO: have let and then return adding of proj and other
-          ],
-          -- Value: TODO HERE WE CAN RECURSE OR SOMETHING
-          .app f args
-        ]
-|   Expr.app f args, false => 
-        -- Add the runtime accumulated in `f`
-        mkAppN (.const `Nat.add .nil)
-        #[
-          mkNatLit 1,
-          -- Add the runtime accumalated in `args`
-          runtime_value args false -- TODO: change to add with **projection**
-          -- TODO: have let and then return adding of proj and other
-        ]
-|   Expr.lam argName argType body _, b => 
-        .lam argName argType (runtime_value body b) .default 
--- | .const `a ℓ => --.const ``Nat.zero []
---      mkAppN (.const ``prod_make .nil) #[
---         .const `Nat List.nil,
---         .const `Nat .nil,
---         mkNatLit 0,
---         .const `a ℓ
---      ]
-|   _, _ => mkNatLit 1
- 
-
 def myTestBoy := 1
 
 def samp: Expr := .lam `a  (.const `Nat .nil) (mkAppN (.const `and []) #[.const `Bool.false [], .const `Bool.true []]) .default
@@ -76,18 +37,66 @@ def addDeclTest : MetaM Unit := do
     -- let ddd := match (← getConstInfo $ Name.str Name.anonymous "myTestBoy")? with
     --   | some x => x
     --   | none => panic! "nope"
-    let ddd := match (← getEnv).find? $ Name.str Name.anonymous "myTestBoy" with
-  | some info => true
-  | none      => false
+    
+  let check_runtime_def (f : String) : MetaM Bool := do
+    match (← getEnv).find? $ Name.str Name.anonymous (f ++ "Runtime") with
+    | some _ => pure true
+    | none      => pure false
 
-    let .defnInfo defVal ← getConstInfo $ Name.str Name.anonymous "myTestBoy" | -- TODO: on def only
-      throwError "ITS NOT THERE!"
-    ;
-    -- TODO: figure out how to get
+  let rec runtime_value : Expr → Bool → MetaM Expr
+  |   Expr.app f args, true => do
+        match f with
+        | .const (.str _ f_str)  _ => do
+          if (← check_runtime_def f_str) then
+            -- TODO: ADD 1 somehow
+             pure $ mkAppN (.const (f_str ++ "Runtime") []) #[
+              -- Add the runtime accumalated in `args`
+              args
+            ]
+          else
+            pure (mkAppN (.const `Prod.mk [.zero, .zero]) #[
+            .const `Nat [],
+            .const `Bool [],
+            -- Add the runtime accumulated in `f`
+            mkAppN (.const `Nat.add .nil)
+            #[
+              mkNatLit 1,
+              -- Add the runtime accumalated in `args`
+              ← runtime_value args false 
+            ],
+            -- Value: TODO HERE WE CAN RECURSE OR SOMETHING
+            .app f args
+          ])
+        | _ =>
+          pure (mkAppN (.const `Prod.mk [.zero, .zero]) #[
+            .const `Nat [],
+            .const `Bool [],
+            -- Add the runtime accumulated in `f`
+            mkAppN (.const `Nat.add .nil)
+            #[
+              mkNatLit 1,
+              -- Add the runtime accumalated in `args`
+              ← runtime_value args false 
+            ],
+            -- Value: TODO HERE WE CAN RECURSE OR SOMETHING
+            .app f args
+          ])
+  |   Expr.app f args, false => do
+          -- Add the runtime accumulated in `f`
+          pure (mkAppN (.const `Nat.add .nil)
+          #[
+            mkNatLit 1,
+            -- Add the runtime accumalated in `args`
+            ← runtime_value args false
+          ])
+  |   Expr.lam argName argType body _, b => do
+          pure (.lam argName argType (← runtime_value body b) .default )
+  |   _, _ => do pure (mkNatLit 1)
+ 
 
     addDecl $ .defnDecl {
 
-    value  := runtime_value samp true 
+    value  :=  ← (runtime_value samp true)
       -- .lam `a (.const `Nat [])
       --   (
       --     (mkAppN (.const `Prod.mk [
