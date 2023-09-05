@@ -10,6 +10,11 @@ def mkRuntimePropImpl (ind : Name) (rel : Name) (relStx : Syntax) : MetaM Unit :
   let .defnInfo defVal ← getConstInfo ind | -- TODO: on def only
     throwError "incr_runtime applies only to `def` functions"
   ;
+  IO.print "Def Val Value: "
+  IO.println defVal.value
+  -- Def Val Value!!fun (n : Nat) =>
+    -- aaa.match_1.{1} (fun (n._@.bigO2._hyg.144 : Nat) => Bool) n (fun (_ : Unit) => Bool.false) (fun (n : Nat) => aaa n)
+
 
   -- let (thmTy,shape) ← Meta.forallTelescope type fun fvars ty ↦ do
   --   if !ty.isProp then throwError "mk_iff only applies to prop-valued declarations"
@@ -34,11 +39,11 @@ def mkRuntimePropImpl (ind : Name) (rel : Name) (relStx : Syntax) : MetaM Unit :
   -- -- TODO: I dont think that this is right
   -- -- #print defVal.type
   -- -- TODO: type reinforcement
-  let runtime_type := match defVal.type with
-  | Expr.forallE a inpType resType _ => Expr.forallE a inpType 
-      (mkAppN (.const ``Prod.mk [Level.succ .zero, Level.succ .zero])
-             #[Expr.sort (Level.succ .zero), Expr.sort (Level.succ .zero),  .const ``Nat [], resType]) .default
-  | _ => Expr.const ``Nat [] -- TODO: put in error throw
+  -- let runtime_type := match defVal.type with
+  -- | Expr.forallE a inpType resType _ => Expr.forallE a inpType 
+  --     (mkAppN (.const ``Prod.mk [Level.succ .zero, Level.succ .zero])
+  --            #[Expr.sort (Level.succ .zero), Expr.sort (Level.succ .zero),  .const ``Nat [], resType]) .default
+  -- | _ => Expr.const ``Nat [] -- TODO: put in error throw
   -- -- TODO: put in error throw
   -- -- | _ => throwError "The input type must be a function with a →"
 
@@ -46,8 +51,11 @@ def mkRuntimePropImpl (ind : Name) (rel : Name) (relStx : Syntax) : MetaM Unit :
   -- -- ) .default
   -- -- TODO:?
 
-  let rec runtime_value : Expr → Bool → Expr
-  |   Expr.app f args, true => 
+  let rec runtime_value : Expr → Bool → MetaM Expr
+  |   Expr.app f args, true => do
+          IO.print "App true: "
+          IO.println f
+          pure (
           mkAppN (.const ``prod_make .nil) #[
             .const `Nat List.nil,
             .const `Bool List.nil,
@@ -56,25 +64,31 @@ def mkRuntimePropImpl (ind : Name) (rel : Name) (relStx : Syntax) : MetaM Unit :
             #[
               mkNatLit 1,
               -- Add the runtime accumalated in `args`
-              runtime_value args false -- TODO: change to add with **projection**
+              ← runtime_value args false -- TODO: change to add with **projection**
               -- TODO: have let and then return adding of proj and other
             ],
             -- Value: TODO HERE WE CAN RECURSE OR SOMETHING
             .app f args
-          ]
-  |   Expr.app f args, false => 
+          ])
+  |   Expr.app f args, false => do
+          IO.print "App false: "
+          IO.println f
           -- Add the runtime accumulated in `f`
-          mkAppN (.const `Nat.add .nil)
+          pure (mkAppN (.const `Nat.add .nil)
           #[
             mkNatLit 1,
             -- Add the runtime accumalated in `args`
-            runtime_value args false -- TODO: change to add with **projection**
+            ← runtime_value args false -- TODO: change to add with **projection**
             -- TODO: have let and then return adding of proj and other
-          ]
-  |   Expr.lam argName argType body _, true => 
-          .lam argName argType (runtime_value body true) .default 
-  |   Expr.lam argName argType body _, false => 
-          .lam argName argType (runtime_value body false) .default 
+          ])
+  |   Expr.lam argName argType body _, true => do
+          IO.print "Lam true: "
+          IO.println body
+          pure (.lam argName argType (← runtime_value body true) .default )
+  |   Expr.lam argName argType body _, false => do
+          IO.print "Lam false: "
+          IO.println body
+          pure (.lam argName argType (← runtime_value body false) .default)
   -- | .const `a ℓ => --.const ``Nat.zero []
   --      mkAppN (.const ``prod_make .nil) #[
   --         .const `Nat List.nil,
@@ -82,12 +96,18 @@ def mkRuntimePropImpl (ind : Name) (rel : Name) (relStx : Syntax) : MetaM Unit :
   --         mkNatLit 0,
   --         .const `a ℓ
   --      ]
-  |   _, true => mkAppN (.const ``prod_make .nil) #[.const `Nat [], .const `Bool [], mkNatLit 10, .const `Bool.false []] --mkNatLit 100
-  |   _, false => mkNatLit 0
+  |   e, true => do
+          IO.print "catch: "
+          IO.println e
+          pure (mkAppN (.const ``prod_make .nil) #[.const `Nat [], .const `Bool [], mkNatLit 10, .const `Bool.false []])
+  |   e, false => do
+        IO.print "catch: "
+        IO.println e
+        pure (mkNatLit 0)
  
   -- Add decleration of Runtime Function
   addDecl $ .defnDecl {
-    value  := .const `sorry []-- runtime_value defVal.value true-- want this value to be correct
+    value  := ← runtime_value defVal.value true-- want this value to be correct
     hints  := defVal.hints
     safety := defVal.safety -- not quite sure about how to do saftey but should be exact same
     levelParams := defVal.levelParams
@@ -109,8 +129,13 @@ initialize registerBuiltinAttribute {
   let (tgt, idStx) ← match stx with
     -- | `(attr| incr_runtime $tgt:ident) =>
     --   pure ((← mkDeclName (← getCurrNamespace) {} tgt.getId).1, tgt.raw)
-    | `(attr| incr_runtime) => pure (decl.appendAfter "Runtime", stx)
+    | `(attr| incr_runtime) => 
+        pure (decl.appendAfter "Runtime", stx)
     | _ => throwError "unrecognized syntax"
+  IO.print "Syntax: "
+  IO.println stx
+  IO.println ""
   mkRuntimePropImpl decl tgt idStx
   }
+
 
